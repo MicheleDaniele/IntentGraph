@@ -126,7 +126,7 @@ class KotlinParser(LanguageParser):
                     export_type=s.symbol_type,
                     symbol_id=s.id
                 )
-                for s in symbols if not s.is_private
+                for s in symbols if s.is_exported
             ]
 
             raw_imports = self._extract_raw_imports(tree.root_node)
