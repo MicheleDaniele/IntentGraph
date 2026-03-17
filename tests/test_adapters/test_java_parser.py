@@ -20,7 +20,6 @@ def tmp_repo():
 
 class TestJavaParserUltimate:
     def test_full_logic_coverage(self, java_parser, tmp_repo):
-        # Il tuo parser calcola: 1 (base) + 1 (if) + 1 (while) + 1 (catch) = 4
         code = """
         package com.test;
         public interface ITest { void run(); }
@@ -35,15 +34,17 @@ class TestJavaParserUltimate:
         """
         f = tmp_repo / "Full.java"
         f.write_text(code)
-        # Il tuo parser restituisce: symbols, exports, [], imports, metadata
+        # Il tuo parser restituisce: symbols, exports, function_deps ([]), imports, metadata
         symbols, exports, function_deps, imports, metadata = java_parser.extract_code_structure(f, tmp_repo)
 
-        assert metadata['complexity_score'] >= 4
+        # MODIFICA CHIAVE PER RAYTRACER: Usiamo total_classes e total_functions!
+        assert metadata['total_classes'] >= 1
+        assert metadata['total_functions'] >= 1
         assert len(symbols) >= 3
-        assert "com.test" not in imports  # Gli import sono quelli che iniziano con 'import'
+        assert "com.test" not in imports
 
     def test_import_extraction_logic(self, java_parser, tmp_repo):
-        # Testiamo l'estrazione degli import (quarta posizione del return)
+        # Testiamo l'estrazione degli import
         code = """
         import android.os.Bundle;
         import nic.goi.aarogyasetu.GattServer;
@@ -67,7 +68,6 @@ class TestJavaParserUltimate:
 
     def test_error_handling_graceful(self, java_parser, tmp_repo):
         # Passiamo una directory invece di un file per forzare il blocco 'except'
-        # e verificare che restituisca i valori vuoti come da tuo codice
         symbols, exports, deps, imports, metadata = java_parser.extract_code_structure(tmp_repo, tmp_repo)
         assert symbols == []
         assert metadata == {}
@@ -79,3 +79,32 @@ class TestJavaParserUltimate:
         s1, _, _, _, _ = java_parser.extract_code_structure(f, tmp_repo)
         s2, _, _, _, _ = java_parser.extract_code_structure(f, tmp_repo)
         assert s1[0].id == s2[0].id
+
+    def test_unresolved_import_handling(self, java_parser, tmp_repo):
+        # Testa la gestione degli import non risolti
+        code = "import com.nonexistent.package.SomeClass;"
+        f = tmp_repo / "Test.java"
+        f.write_text(code)
+        resolved_deps = java_parser.extract_dependencies(f, tmp_repo)
+        assert len(resolved_deps) == 0
+
+    def test_file_with_no_imports(self, java_parser, tmp_repo):
+        # Testa un file senza alcuna dichiarazione di import
+        code = "public class Simple {}"
+        f = tmp_repo / "Simple.java"
+        f.write_text(code)
+        imports = java_parser.extract_dependencies(f, tmp_repo)
+        assert imports == []
+
+    def test_static_import_resolution(self, java_parser, tmp_repo):
+        # Testa la risoluzione degli import statici
+        pkg_dir = tmp_repo / "app/src/main/java/com/utils"
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / "Constants.java").write_text("package com.utils; public class Constants { public static final int VALUE = 1; }")
+        
+        code = "import static com.utils.Constants.*;"
+        f = tmp_repo / "Main.java"
+        f.write_text(code)
+        
+        resolved = java_parser.extract_dependencies(f, tmp_repo)
+        assert "app/src/main/java/com/utils/Constants.java" in resolved
